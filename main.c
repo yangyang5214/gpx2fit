@@ -16,8 +16,8 @@
 #include "string.h"
 #include <math.h>
 
-#include "fit_product.h"
-#include "fit_crc.h"
+#include "fit/fit_product.h"
+#include "fit/fit_crc.h"
 
 // 2 * PI (3.14159265)
 #define TWOPI 6.2831853

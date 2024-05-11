@@ -15,6 +15,7 @@
 #include "stdio.h"
 #include "string.h"
 #include <math.h>
+#include <time.h>
 
 #include "fit/fit_product.h"
 #include "fit/fit_crc.h"
@@ -305,4 +306,11 @@ void WriteData(const void *data, FIT_UINT16 data_size, FILE *fp)
 
     for (offset = 0; offset < data_size; offset++)
         data_crc = FitCRC_Get16(data_crc, *((FIT_UINT8 *)data + offset));
+}
+
+long seconds_since_fit_epoch(const char *time_str) {
+    //1989-12-31T:00:00:00Z -> UTC + 631036800
+    struct tm tm_time;
+    strptime(time_str, "%Y-%m-%dT%H:%M:%S", &tm_time);
+    return (mktime(&tm_time) - 631036800);
 }

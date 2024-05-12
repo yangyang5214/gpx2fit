@@ -16,6 +16,7 @@
 #include "string.h"
 #include <math.h>
 #include <time.h>
+#include <libxml/parser.h>
 
 #include "fit/fit_product.h"
 #include "fit/fit_crc.h"
@@ -25,6 +26,8 @@
 
 // Number of semicircles per meter at the equator
 #define SC_PER_M 107.173
+
+#define DEFAULT_XML_FILE "gpxs/garmin.gpx"
 
 ///////////////////////////////////////////////////////////////////////
 // Private Function Prototypes
@@ -77,6 +80,17 @@ static FIT_UINT16 data_crc;
 
 int main(void)
 {
+    {
+        char *xml_file = DEFAULT_XML_FILE;
+        xmlDocPtr doc;
+        doc = xmlParseFile(xml_file);
+        if (doc == NULL) {
+            printf("input gpx file error");
+            return -1;
+        }
+    }
+
+
     FILE *fp;
 
     data_crc = 0;

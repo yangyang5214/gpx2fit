@@ -20,6 +20,7 @@
 
 #include "fit/fit_product.h"
 #include "fit/fit_crc.h"
+#include "gpxp/gpxp.c"
 
 // 2 * PI (3.14159265)
 #define TWOPI 6.2831853
@@ -27,7 +28,7 @@
 // Number of semicircles per meter at the equator
 #define SC_PER_M 107.173
 
-#define DEFAULT_XML_FILE "gpxs/garmin.gpx"
+#define DEFAULT_GPX_FILE "gpxs/garmin.gpx"
 
 ///////////////////////////////////////////////////////////////////////
 // Private Function Prototypes
@@ -62,7 +63,7 @@ void WriteMessage(FIT_UINT8 local_mesg_number, const void *mesg_pointer, FIT_UIN
 // Appends a FIT message (including the message header) to the end of a file.
 ///////////////////////////////////////////////////////////////////////
 
-void WriteDeveloperField(const void* data, FIT_UINT16 data_size, FILE *fp);
+void WriteDeveloperField(const void *data, FIT_UINT16 data_size, FILE *fp);
 ///////////////////////////////////////////////////////////////////////
 // Appends Developer Fields to a Message
 ///////////////////////////////////////////////////////////////////////
@@ -78,14 +79,13 @@ void WriteData(const void *data, FIT_UINT16 data_size, FILE *fp);
 
 static FIT_UINT16 data_crc;
 
-int main(void)
-{
+int main(void) {
+    int numPoints;
+    struct Point *points;
+
     {
-        char *xml_file = DEFAULT_XML_FILE;
-        xmlDocPtr doc;
-        doc = xmlParseFile(xml_file);
-        if (doc == NULL) {
-            printf("input gpx file error");
+        points = parserGpx(DEFAULT_GPX_FILE, &numPoints);
+        if (points == NULL) {
             return -1;
         }
     }
@@ -94,12 +94,13 @@ int main(void)
     FILE *fp;
 
     data_crc = 0;
-    fp = fopen("test.fit", "w+b");
+    fp = fopen("result.fit", "w+b");
 
     WriteFileHeader(fp);
 
-    FIT_DATE_TIME timestamp = 1000000000; // 2021-09-08T01:46:40-0600Z in seconds since the FIT Epoch of 1989-12-31T:00:00:00Z
-    FIT_DATE_TIME start_time = timestamp;
+//    FIT_DATE_TIME timestamp = 1000000000; // 2021-09-08T01:46:40-0600Z in seconds since the FIT Epoch of 1989-12-31T:00:00:00Z
+    FIT_DATE_TIME start_time = points[0].time_ts;
+    FIT_DATE_TIME stop_time = points[numPoints - 1].time_ts;
 
     // Write file id message.
     {
@@ -107,7 +108,7 @@ int main(void)
         FIT_FILE_ID_MESG file_id_mesg;
         Fit_InitMesg(fit_mesg_defs[FIT_MESG_FILE_ID], &file_id_mesg);
 
-        file_id_mesg.time_created = timestamp;
+        file_id_mesg.time_created = start_time;
         file_id_mesg.type = FIT_FILE_ACTIVITY;
         file_id_mesg.manufacturer = FIT_MANUFACTURER_DEVELOPMENT;
         WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_FILE_ID], FIT_FILE_ID_MESG_DEF_SIZE, fp);
@@ -123,10 +124,10 @@ int main(void)
         device_info_mesg.device_index = FIT_DEVICE_INDEX_CREATOR;
         device_info_mesg.manufacturer = FIT_MANUFACTURER_DEVELOPMENT;
         device_info_mesg.product = 0; // USE A UNIQUE ID FOR EACH OF YOUR PRODUCTS
-        strcpy(device_info_mesg.product_name, "FIT Cookbook"); // Max 20 Chars
+        strcpy(device_info_mesg.product_name, "gpxt"); // Max 20 Chars
         device_info_mesg.serial_number = 123456;
         device_info_mesg.software_version = 100; // 1.0 * 100
-        device_info_mesg.timestamp = timestamp;
+        device_info_mesg.timestamp = start_time;
 
         WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_DEVICE_INFO], FIT_DEVICE_INFO_MESG_DEF_SIZE, fp);
         WriteMessage(local_mesg_number, &device_info_mesg, FIT_DEVICE_INFO_MESG_SIZE, fp);
@@ -138,7 +139,7 @@ int main(void)
         FIT_EVENT_MESG event_mesg;
         Fit_InitMesg(fit_mesg_defs[FIT_MESG_EVENT], &event_mesg);
 
-        event_mesg.timestamp = timestamp;
+        event_mesg.timestamp = start_time;
         event_mesg.event = FIT_EVENT_TIMER;
         event_mesg.event_type = FIT_EVENT_TYPE_START;
 
@@ -153,27 +154,26 @@ int main(void)
         FIT_UINT8 local_mesg_number = 0;
         WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_RECORD], FIT_RECORD_MESG_DEF_SIZE, fp);
 
-        for (int i = 0; i < 3600; i++)
-        {
+        for (int i = 0; i < numPoints; i++) {
+
+            struct Point cur_point = points[i];
             {
                 FIT_RECORD_MESG record_mesg;
                 Fit_InitMesg(fit_mesg_defs[FIT_MESG_RECORD], &record_mesg);
 
-                record_mesg.timestamp = timestamp;
+                record_mesg.timestamp = cur_point.time_ts;
 
                 // Fake Record Data of Various Signal Patterns
-                record_mesg.distance = i; // Ramp
-                record_mesg.speed = 1; // Flatline
-                record_mesg.heart_rate = ((FIT_UINT8)((sin(TWOPI * (0.01 * i + 10)) + 1.0) * 127.0)); // Sine
-                record_mesg.cadence = ((FIT_UINT8)(i % 255)); // Sawtooth
-                record_mesg.power = ((FIT_UINT16)((i % 255) < 127 ? 150 : 250)); // Square
-                record_mesg.enhanced_altitude = (FIT_UINT32)(((float)fabs(((float)(i % 255)) - 127.0f)) + 500) * 5; // Triangle
-                record_mesg.position_lat = 0;
-                record_mesg.position_long = ((FIT_SINT32)(i * SC_PER_M));
+//                record_mesg.distance = i; // Ramp
+//                record_mesg.speed = 1; // Flatline
+//                record_mesg.heart_rate = ((FIT_UINT8) ((sin(TWOPI * (0.01 * i + 10)) + 1.0) * 127.0)); // Sine
+//                record_mesg.cadence = ((FIT_UINT8) (i % 255)); // Sawtooth
+//                record_mesg.power = ((FIT_UINT16) ((i % 255) < 127 ? 150 : 250)); // Square
+                record_mesg.altitude = cur_point.ele;
+                record_mesg.position_lat = cur_point.lat * 11930465;
+                record_mesg.position_long = cur_point.lon * 11930465;
 
                 WriteMessage(local_mesg_number, &record_mesg, FIT_RECORD_MESG_SIZE, fp);
-
-                timestamp++;
             }
         }
     }
@@ -184,7 +184,7 @@ int main(void)
         FIT_EVENT_MESG event_mesg;
         Fit_InitMesg(fit_mesg_defs[FIT_MESG_EVENT], &event_mesg);
 
-        event_mesg.timestamp = timestamp;
+        event_mesg.timestamp = stop_time;
         event_mesg.event = FIT_EVENT_TIMER;
         event_mesg.event_type = FIT_EVENT_TYPE_STOP;
 
@@ -193,40 +193,40 @@ int main(void)
     }
 
     // Write Lap message.
-    {
-        FIT_UINT8 local_mesg_number = 0;
-        FIT_LAP_MESG lap_mesg;
-        Fit_InitMesg(fit_mesg_defs[FIT_MESG_LAP], &lap_mesg);
-
-        lap_mesg.message_index = 0;
-        lap_mesg.timestamp = timestamp;
-        lap_mesg.start_time = start_time;
-        lap_mesg.total_elapsed_time = (timestamp - start_time) * 1000;
-        lap_mesg.total_timer_time = (timestamp - start_time) * 1000;
-
-        WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_LAP], FIT_LAP_MESG_DEF_SIZE, fp);
-        WriteMessage(local_mesg_number, &lap_mesg, FIT_LAP_MESG_SIZE, fp);
-    }
+//    {
+//        FIT_UINT8 local_mesg_number = 0;
+//        FIT_LAP_MESG lap_mesg;
+//        Fit_InitMesg(fit_mesg_defs[FIT_MESG_LAP], &lap_mesg);
+//
+//        lap_mesg.message_index = 0;
+//        lap_mesg.timestamp = timestamp;
+//        lap_mesg.start_time = start_time;
+//        lap_mesg.total_elapsed_time = (timestamp - start_time) * 1000;
+//        lap_mesg.total_timer_time = (timestamp - start_time) * 1000;
+//
+//        WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_LAP], FIT_LAP_MESG_DEF_SIZE, fp);
+//        WriteMessage(local_mesg_number, &lap_mesg, FIT_LAP_MESG_SIZE, fp);
+//    }
 
     // Write Session message.
-    {
-        FIT_UINT8 local_mesg_number = 0;
-        FIT_SESSION_MESG session_mesg;
-        Fit_InitMesg(fit_mesg_defs[FIT_MESG_SESSION], &session_mesg);
-
-        session_mesg.message_index = 0;
-        session_mesg.timestamp = timestamp;
-        session_mesg.start_time = start_time;
-        session_mesg.total_elapsed_time = (timestamp - start_time) * 1000;
-        session_mesg.total_timer_time = (timestamp - start_time) * 1000;
-        session_mesg.sport = FIT_SPORT_STAND_UP_PADDLEBOARDING;
-        session_mesg.sub_sport = FIT_SUB_SPORT_GENERIC;
-        session_mesg.first_lap_index = 0;
-        session_mesg.num_laps = 1;
-
-        WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_SESSION], FIT_SESSION_MESG_DEF_SIZE, fp);
-        WriteMessage(local_mesg_number, &session_mesg, FIT_SESSION_MESG_SIZE, fp);
-    }
+//    {
+//        FIT_UINT8 local_mesg_number = 0;
+//        FIT_SESSION_MESG session_mesg;
+//        Fit_InitMesg(fit_mesg_defs[FIT_MESG_SESSION], &session_mesg);
+//
+//        session_mesg.message_index = 0;
+//        session_mesg.timestamp = timestamp;
+//        session_mesg.start_time = start_time;
+//        session_mesg.total_elapsed_time = (start_time - start_time) * 1000;
+//        session_mesg.total_timer_time = (start_time - start_time) * 1000;
+//        session_mesg.sport = FIT_SPORT_STAND_UP_PADDLEBOARDING;
+//        session_mesg.sub_sport = FIT_SUB_SPORT_GENERIC;
+//        session_mesg.first_lap_index = 0;
+//        session_mesg.num_laps = 1;
+//
+//        WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_SESSION], FIT_SESSION_MESG_DEF_SIZE, fp);
+//        WriteMessage(local_mesg_number, &session_mesg, FIT_SESSION_MESG_SIZE, fp);
+//    }
 
     // Write Activity message.
     {
@@ -234,12 +234,12 @@ int main(void)
         FIT_ACTIVITY_MESG activity_mesg;
         Fit_InitMesg(fit_mesg_defs[FIT_MESG_ACTIVITY], &activity_mesg);
 
-        activity_mesg.timestamp = timestamp;
+//        activity_mesg.timestamp = timestamp;
         activity_mesg.num_sessions = 1;
-        activity_mesg.total_timer_time = (timestamp - start_time) * 1000;
+        activity_mesg.total_timer_time = (stop_time - start_time) * 1000;
 
-        int timezoneOffset = -7 * 3600;
-        activity_mesg.local_timestamp = timestamp + timezoneOffset;
+        int timezoneOffset = +8 * 3600;
+        activity_mesg.local_timestamp = start_time + timezoneOffset;
 
         WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_ACTIVITY], FIT_ACTIVITY_MESG_DEF_SIZE, fp);
         WriteMessage(local_mesg_number, &activity_mesg, FIT_ACTIVITY_MESG_SIZE, fp);
@@ -252,28 +252,26 @@ int main(void)
     WriteFileHeader(fp);
 
     fclose(fp);
-
+    free(points);
     return 0;
 }
 
-void WriteFileHeader(FILE *fp)
-{
+void WriteFileHeader(FILE *fp) {
     FIT_FILE_HDR file_header;
 
     file_header.header_size = FIT_FILE_HDR_SIZE;
     file_header.profile_version = FIT_PROFILE_VERSION;
     file_header.protocol_version = FIT_PROTOCOL_VERSION_20;
-    memcpy((FIT_UINT8 *)&file_header.data_type, ".FIT", 4);
+    memcpy((FIT_UINT8 *) &file_header.data_type, ".FIT", 4);
     fseek(fp, 0, SEEK_END);
     file_header.data_size = ftell(fp) - FIT_FILE_HDR_SIZE - sizeof(FIT_UINT16);
     file_header.crc = FitCRC_Calc16(&file_header, FIT_STRUCT_OFFSET(crc, FIT_FILE_HDR));
 
     fseek(fp, 0, SEEK_SET);
-    fwrite((void *)&file_header, 1, FIT_FILE_HDR_SIZE, fp);
+    fwrite((void *) &file_header, 1, FIT_FILE_HDR_SIZE, fp);
 }
 
-void WriteMessageDefinition(FIT_UINT8 local_mesg_number, const void *mesg_def_pointer, FIT_UINT16 mesg_def_size, FILE *fp)
-{
+void WriteMessageDefinition(FIT_UINT8 local_mesg_number, const void *mesg_def_pointer, FIT_UINT16 mesg_def_size, FILE *fp) {
     FIT_UINT8 header = local_mesg_number | FIT_HDR_TYPE_DEF_BIT;
     WriteData(&header, FIT_HDR_SIZE, fp);
     WriteData(mesg_def_pointer, mesg_def_size, fp);
@@ -287,38 +285,34 @@ void WriteMessageDefinitionWithDevFields
                 FIT_UINT8 number_dev_fields,
                 FIT_DEV_FIELD_DEF *dev_field_definitions,
                 FILE *fp
-        )
-{
+        ) {
     FIT_UINT16 i;
     FIT_UINT8 header = local_mesg_number | FIT_HDR_TYPE_DEF_BIT | FIT_HDR_DEV_DATA_BIT;
     WriteData(&header, FIT_HDR_SIZE, fp);
     WriteData(mesg_def_pointer, mesg_def_size, fp);
 
     WriteData(&number_dev_fields, sizeof(FIT_UINT8), fp);
-    for (i = 0; i < number_dev_fields; i++)
-    {
+    for (i = 0; i < number_dev_fields; i++) {
         WriteData(&dev_field_definitions[i], sizeof(FIT_DEV_FIELD_DEF), fp);
     }
 }
 
-void WriteMessage(FIT_UINT8 local_mesg_number, const void *mesg_pointer, FIT_UINT16 mesg_size, FILE *fp)
-{
+void WriteMessage(FIT_UINT8 local_mesg_number, const void *mesg_pointer, FIT_UINT16 mesg_size, FILE *fp) {
     WriteData(&local_mesg_number, FIT_HDR_SIZE, fp);
     WriteData(mesg_pointer, mesg_size, fp);
 }
 
-void WriteDeveloperField(const void *data, FIT_UINT16 data_size, FILE *fp)
-{
+void WriteDeveloperField(const void *data, FIT_UINT16 data_size, FILE *fp) {
     WriteData(data, data_size, fp);
 }
 
-void WriteData(const void *data, FIT_UINT16 data_size, FILE *fp)
-{
+void WriteData(const void *data, FIT_UINT16 data_size, FILE *fp) {
     FIT_UINT16 offset;
 
     fwrite(data, 1, data_size, fp);
 
-    for (offset = 0; offset < data_size; offset++)
-        data_crc = FitCRC_Get16(data_crc, *((FIT_UINT8 *)data + offset));
+    for (offset = 0; offset < data_size; offset++) {
+        data_crc = FitCRC_Get16(data_crc, *((FIT_UINT8 *) data + offset));
+    }
 }
 

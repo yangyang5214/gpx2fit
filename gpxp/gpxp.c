@@ -92,25 +92,4 @@ struct Point *parserGpx(const char *filename, int *numPoints) {
     return points;
 }
 
-int main(int argc, char *argv[]) {
-
-    if (argc < 2) {
-        printf("No file name given!\n");
-        return 1;
-    }
-    printf("process file %s\n", argv[1]);
-
-    int numPoints;
-    struct Point *points = parserGpx(argv[1], &numPoints);
-    printf("num of point %d\n", numPoints);
-    if (points == NULL) {
-        return 0;
-    }
-    for (int i = 0; i < numPoints; ++i) {
-        printf("Point %d: lat=%f, lon=%f, ele=%f, time=%ld\n", i + 1, points[i].lat, points[i].lon, points[i].ele, points[i].time_ts);
-    }
-    free(points);
-    return 0;
-}
-
 

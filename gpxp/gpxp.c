@@ -1,30 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
-
 #include <time.h>
-
-#include <math.h>
-
+#include "gpxp.h"
 #include <libxml/tree.h>
-#include <libxml/xpath.h>
-#include <libxml/xpathInternals.h>
 
-int main(int argc, char *argv[]) {
 
-    if (argc < 2) {
-        printf("No file name given!\n");
-        return 1;
-    }
+struct Point *createPointArray(int size) {
+    return (struct Point *) malloc(size * sizeof(struct Point));
+}
 
-    printf("process file %s\n", argv[1]);
+long seconds_since_fit_epoch(const char *time_str) {
+    //1989-12-31T:00:00:00Z -> UTC + 631036800
+    struct tm tm_time;
+    strptime(time_str, "%Y-%m-%dT%H:%M:%S", &tm_time);
+    return (mktime(&tm_time) - 631036800);
+}
 
-    // Load file
-    xmlDocPtr doc = xmlParseFile(argv[1]);
+struct Point *parserGpx(const char *filename, int *numPoints) {
+    xmlDocPtr doc = xmlParseFile(filename);
     if (doc == NULL) {
         // 解析失败
         fprintf(stderr, "Failed to parse document\n");
-        return -1;
+        return NULL;
     }
 
     xmlNodePtr cur = xmlDocGetRootElement(doc);
@@ -32,8 +29,11 @@ int main(int argc, char *argv[]) {
     if (cur == NULL) {
         fprintf(stderr, "Empty document\n");
         xmlFreeDoc(doc);
-        return -1;
+        return NULL;
     }
+
+    int count = 0;
+    struct Point *points = createPointArray(100); // 初始分配100个元素的数组
 
     for (cur = cur->xmlChildrenNode; cur != NULL; cur = cur->next) {
         if (xmlStrcmp(cur->name, (const xmlChar *) "trk") == 0) {
@@ -49,33 +49,67 @@ int main(int argc, char *argv[]) {
             // 遍历 <trkseg> 下的所有 <trkpt> 节点
             for (xmlNodePtr trkpt = trkseg->xmlChildrenNode; trkpt != NULL; trkpt = trkpt->next) {
                 if (xmlStrcmp(trkpt->name, (const xmlChar *) "trkpt") == 0) {
-                    // 提取经纬度信息
+
+                    struct Point point;
+
                     xmlChar *lat = xmlGetProp(trkpt, (const xmlChar *) "lat");
                     xmlChar *lon = xmlGetProp(trkpt, (const xmlChar *) "lon");
+
+                    point.lat = strtod((const char *) lat, NULL);
+                    point.lon = strtod((const char *) lon, NULL);
+
+                    xmlFree(lat);
+                    xmlFree(lon);
+
+
                     xmlNodePtr child = trkpt->xmlChildrenNode;
                     // 遍历 <trkpt> 下的所有子节点
                     while (child != NULL) {
                         if (xmlStrcmp(child->name, (const xmlChar *) "ele") == 0) {
                             xmlChar *ele = xmlNodeListGetString(doc, child->xmlChildrenNode, 1);
-                            printf("Latitude: %s, Longitude: %s, Elevation: %s\n", lat, lon, ele);
+                            point.ele = strtod((const char *) ele, NULL);
                             xmlFree(ele);
                         } else if (xmlStrcmp(child->name, (const xmlChar *) "time") == 0) {
                             xmlChar *time = xmlNodeListGetString(doc, child->xmlChildrenNode, 1);
-                            printf("Time: %s\n", time);
+                            point.time_ts = seconds_since_fit_epoch((char *) time);
                             xmlFree(time);
                         }
                         child = child->next;
                     }
-                    xmlFree(lat);
-                    xmlFree(lon);
+
+                    points[count++] = point;
+                    if (count % 100 == 0) {
+                        points = realloc(points, (count + 100) * sizeof(struct Point));
+                    }
                 }
             }
         }
     }
-
-    // 释放资源
     xmlFreeDoc(doc);
     xmlCleanupParser();
+
+    *numPoints = count;
+    return points;
+}
+
+int main(int argc, char *argv[]) {
+
+    if (argc < 2) {
+        printf("No file name given!\n");
+        return 1;
+    }
+    printf("process file %s\n", argv[1]);
+
+    int numPoints;
+    struct Point *points = parserGpx(argv[1], &numPoints);
+    printf("num of point %d\n", numPoints);
+    if (points == NULL) {
+        return 0;
+    }
+    for (int i = 0; i < numPoints; ++i) {
+        printf("Point %d: lat=%f, lon=%f, ele=%f, time=%ld\n", i + 1, points[i].lat, points[i].lon, points[i].ele, points[i].time_ts);
+    }
+    free(points);
     return 0;
 }
 

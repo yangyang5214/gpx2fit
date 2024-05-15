@@ -54,6 +54,7 @@ dkms.conf
 
 
 bin
+build
 test.fit
 gpxp/gpxp
 result.fit

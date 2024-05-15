@@ -14,13 +14,9 @@
 
 #include "stdio.h"
 #include "string.h"
-#include <math.h>
-#include <time.h>
-#include <libxml/parser.h>
-
-#include "fit/fit_product.h"
-#include "fit/fit_crc.h"
-#include "gpxp/gpxp.c"
+#include "../fit/fit_product.h"
+#include "../fit/fit_crc.h"
+#include "../gpxp/gpxp.h"
 
 // 2 * PI (3.14159265)
 #define TWOPI 6.2831853
@@ -28,7 +24,7 @@
 // Number of semicircles per meter at the equator
 #define SC_PER_M 107.173
 
-#define DEFAULT_GPX_FILE "gpxs/garmin.gpx"
+#define DEFAULT_GPX_FILE "../gpxs/garmin.gpx"
 
 ///////////////////////////////////////////////////////////////////////
 // Private Function Prototypes
@@ -116,22 +112,22 @@ int main(void) {
     }
 
     // Write Device Info message.
-    {
-        FIT_UINT8 local_mesg_number = 0;
-        FIT_DEVICE_INFO_MESG device_info_mesg;
-        Fit_InitMesg(fit_mesg_defs[FIT_MESG_DEVICE_INFO], &device_info_mesg);
-
-        device_info_mesg.device_index = FIT_DEVICE_INDEX_CREATOR;
-        device_info_mesg.manufacturer = FIT_MANUFACTURER_DEVELOPMENT;
-        device_info_mesg.product = 0; // USE A UNIQUE ID FOR EACH OF YOUR PRODUCTS
-        strcpy(device_info_mesg.product_name, "gpxt"); // Max 20 Chars
-        device_info_mesg.serial_number = 123456;
-        device_info_mesg.software_version = 100; // 1.0 * 100
-        device_info_mesg.timestamp = start_time;
-
-        WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_DEVICE_INFO], FIT_DEVICE_INFO_MESG_DEF_SIZE, fp);
-        WriteMessage(local_mesg_number, &device_info_mesg, FIT_DEVICE_INFO_MESG_SIZE, fp);
-    }
+//    {
+//        FIT_UINT8 local_mesg_number = 0;
+//        FIT_DEVICE_INFO_MESG device_info_mesg;
+//        Fit_InitMesg(fit_mesg_defs[FIT_MESG_DEVICE_INFO], &device_info_mesg);
+//
+//        device_info_mesg.device_index = FIT_DEVICE_INDEX_CREATOR;
+//        device_info_mesg.manufacturer = FIT_MANUFACTURER_DEVELOPMENT;
+//        device_info_mesg.product = 0; // USE A UNIQUE ID FOR EACH OF YOUR PRODUCTS
+//        strcpy(device_info_mesg.product_name, "gpxt"); // Max 20 Chars
+//        device_info_mesg.serial_number = 123456;
+//        device_info_mesg.software_version = 100; // 1.0 * 100
+//        device_info_mesg.timestamp = start_time;
+//
+//        WriteMessageDefinition(local_mesg_number, fit_mesg_defs[FIT_MESG_DEVICE_INFO], FIT_DEVICE_INFO_MESG_DEF_SIZE, fp);
+//        WriteMessage(local_mesg_number, &device_info_mesg, FIT_DEVICE_INFO_MESG_SIZE, fp);
+//    }
 
     // Write Event message - START Event
     {

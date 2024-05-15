@@ -4,7 +4,6 @@
 #include "gpxp.h"
 #include <libxml/tree.h>
 
-
 struct Point *createPointArray(int size) {
     return (struct Point *) malloc(size * sizeof(struct Point));
 }
